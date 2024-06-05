@@ -73,14 +73,125 @@ void simulate(u8 *memory)
 
     
     switch (opcode & 0xF000) {
+
+        case 0x1000: { // 1nnn: Jump to location nnn.
+            pc = opcode & 0xFFF;
+        } break;
+
+        case 0x2000: { // 2nnn: Call subroutine at nnn.
+            stack[sp++] = pc;
+            pc = opcode & 0xFFF;
+        } break;
+
+        case 0x3000: { // 3xkk: Skip next instruction if Vx = kk.
+            u8 vx = V[(opcode & 0xF00) >> 8];
+            u8 kk = opcode & 0xFF;
+            if (vx == kk) {
+                pc += 2;
+            }
+        } break;
+
+        case 0x4000: { // 4xkk: Skip next instruction if Vx != kk.
+            u8 vx = V[(opcode & 0xF00) >> 8];
+            u8 kk = opcode & 0xFF;
+            if (vx != kk) {
+                pc += 2;
+            }
+        } break;
+
+        case 0x5000: { // 5xy0: Skip next instruction if Vx = Vy.
+            u8 vx = V[(opcode & 0xF00) >> 8];
+            u8 vy = V[(opcode & 0xF0) >> 4];
+            if (vx == vy) {
+                pc += 2;
+            }
+        } break;
+
         case 0x6000: { // 6xkk: Set Vx = kk.
             u8 register_index = (opcode >> 8) & 0xF;
             u8 value = opcode & 0xFF;
             V[register_index] = value;
         } break;
+
+        case 0x7000: { // 7xkk: Set Vx = Vx + kk.
+            V[(opcode & 0xF00) >> 8] += (opcode & 0xFF);
+        } break;
+
+        case 0x8000: {
+            u8 x = (opcode & 0xF00) >> 8;
+            u8 y = (opcode & 0xF0) >> 4;
+
+            switch (opcode & 1) {
+                case 0x0: { // 8xy0: Set Vx = Vy.
+                    V[x] = V[y];
+                } break;
+
+                case 0x1: { // 8xy1: Set Vx = Vx OR Vy.
+                    V[x] = V[x] | V[y];
+                } break;
+
+                case 0x2: { // 8xy2: Set Vx = Vx AND Vy.
+                    V[x] = V[x] & V[y];
+                } break;
+
+                case 0x3: { // 8xy3: Set Vx = Vx XOR Vy.
+                    V[x] = V[x] ^ V[y];
+                } break;
+
+                case 0x4: { // 8xy4: Set Vx = Vx + Vy, set VF = carry.
+                    V[x] = V[x] + V[y];
+
+                    // TODO: check carry. I think this is correct
+                    VF = (V[x] < V[y]); // Carry
+                } break;
+
+                case 0x5: { // 8xy5: Set Vx = Vx - Vy, set VF = NOT borrow.
+                    VF = (V[x] > V[y]);
+
+                    V[x] = V[x] - V[y];
+                } break;
+
+                case 0x6: { // 8xy6: Set Vx = Vx SHR 1.
+                    VF = (V[x] & 1); // If least-significant bit is 1
+                    
+                    V[x] >> 1;
+                } break;
+
+                case 0x7: { // 8xy7: Set Vx = Vy - Vx, set VF = NOT borrow.
+                    VF = (V[y] > V[x]);
+
+                    V[x] = V[y] - V[x];
+                } break;
+
+                case 0xE: { // 8xyE: Set Vx = Vx SHL 1.
+                    VF = (V[x] & 0x80); // If most-significant bit is 1
+
+                    V[x] << 1;
+                } break;
+
+            }
+        } break;
+
+        case 0x9000: { // 9xy0: Skip next instruction if Vx != Vy.
+            u8 vx = V[(opcode & 0xF00) >> 8];
+            u8 vy = V[(opcode & 0xF0) >> 4];
+            if (vx != vy) {
+                pc += 2;
+            }
+        } break;
+
         case 0xA000 : { // Annn: Set I = nnn.
             I = opcode & 0xFFF;
         } break;
+
+        case 0xB000: { // Bnnn: Jump to location nnn + V0.
+            pc = (opcode & 0xFFF) + V[0];
+        } break;
+
+        case 0xC000: { // Cxkk: Set Vx = random byte AND kk.
+            // TODO
+        } break;
+
         case 0xD000: { // Dxyn: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             u8 sprite_width = 8;
             u8 n = opcode & 0xF;
@@ -106,23 +217,8 @@ void simulate(u8 *memory)
 
             VF = collision;
         } break;
-        case 0x1000: { // 1nnn: Jump to location nnn.
-            pc = opcode & 0xFFF;
-        } break;
-        case 0x2000: { // 2nnn: Call subroutine at nnn.
-            stack[sp++] = pc;
-            pc = opcode & 0xFFF;
-        } break;
-        case 0x3000: { // 3xkk: Skip next instruction if Vx = kk.
-            u8 vx = V[(opcode & 0xF00) >> 8];
-            u8 kk = opcode & 0xFF;
-            if (vx == kk) {
-                pc += 2;
-            }
-        } break;
-        case 0x7000: { // 7xkk: Set Vx = Vx + kk.
-            V[(opcode & 0xF00) >> 8] += (opcode & 0xFF);
-        } break;
+        
+        
         case 0xF000: {
             switch (opcode & 0xFF) {
                 case 0x33: { // Fx33: Store BCD representation of Vx in memory locations I, I+1, and I+2.

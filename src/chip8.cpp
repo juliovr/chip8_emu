@@ -10,7 +10,7 @@
 #define SCALE           (40)    /* Pixel scale */
 #define WINDOW_WIDTH    (SCREEN_WIDTH*SCALE)
 #define WINDOW_HEIGHT   (SCREEN_HEIGHT*SCALE)
-#define FPS             (8)
+#define FPS             (16)
 
 
 #define USAGE_ERROR     1
@@ -84,8 +84,10 @@ void simulate(u8 *memory)
         case 0xD000: { // Dxyn: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             u8 sprite_width = 8;
             u8 n = opcode & 0xF;
-            u8 x = (opcode >> 8) & 0xF;
-            u8 y = (opcode >> 4) & 0xF;
+            u8 x = V[(opcode >> 8) & 0xF];
+            u8 y = V[(opcode >> 4) & 0xF];
+
+            u8 collision = 0;
 
             for (int row = 0; row < n; row++) {
                 u8 sprite_row = *(memory + I + row); // Each bit is 1 pixel
@@ -93,9 +95,16 @@ void simulate(u8 *memory)
                 for (int col = 0; col < sprite_width; col++) {
                     int index = ((y + row) * SCREEN_WIDTH) + (x + col);
                     u8 bit_value = (sprite_row >> (7 - col)) & 1; // Set the corresponding bit to the screen byte
-                    screen[index] = bit_value;
+
+                    if (screen[index] != bit_value) {
+                        collision = 1;
+                    }
+
+                    screen[index] ^= bit_value;
                 }
             }
+
+            VF = collision;
         } break;
         case 0x1000: { // 1nnn: Jump to location nnn.
             pc = opcode & 0xFFF;
@@ -191,7 +200,7 @@ int main(int argc, char **argv)
         simulate(memory);
 
         BeginDrawing();
-            ClearBackground(BLACK);
+            // ClearBackground(BLACK);
 
             // Draw pixels scaled
             for (int i = 0; i < SCREEN_HEIGHT; i++) {

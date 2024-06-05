@@ -154,7 +154,7 @@ void simulate(u8 *memory)
                 case 0x6: { // 8xy6: Set Vx = Vx SHR 1.
                     VF = (V[x] & 1); // If least-significant bit is 1
                     
-                    V[x] >> 1;
+                    V[x] >>= 1;
                 } break;
 
                 case 0x7: { // 8xy7: Set Vx = Vy - Vx, set VF = NOT borrow.
@@ -166,7 +166,7 @@ void simulate(u8 *memory)
                 case 0xE: { // 8xyE: Set Vx = Vx SHL 1.
                     VF = (V[x] & 0x80); // If most-significant bit is 1
 
-                    V[x] << 1;
+                    V[x] <<= 1;
                 } break;
 
             }
@@ -189,7 +189,8 @@ void simulate(u8 *memory)
         } break;
 
         case 0xC000: { // Cxkk: Set Vx = random byte AND kk.
-            // TODO
+            u8 random = 0; // TODO: compute random number
+            V[(opcode & 0xF00) >> 8] = random & (opcode & 0xFF);
         } break;
 
         case 0xD000: { // Dxyn: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
@@ -218,17 +219,71 @@ void simulate(u8 *memory)
             VF = collision;
         } break;
         
+        case 0xE000: {
+            // u8 key_pressed = ; // TODO:
+            // u8 vx = V[(opcode & 0xF00) >> 8];
+            switch (opcode & 0xFF) {
+                case 0x9E: { // Ex9E: Skip next instruction if key with the value of Vx is pressed.
+                    // if (key_pressed == vx) {
+                    //     pc += 2;
+                    // }
+                } break;
+
+                case 0xA1: { // ExA1: Skip next instruction if key with the value of Vx is not pressed.
+                    // if (key_pressed != vx) {
+                    //     pc += 2;
+                    // }
+                } break;
+            }
+        } break;
         
         case 0xF000: {
+            u8 x = (opcode & 0xF00) >> 8;
             switch (opcode & 0xFF) {
+                case 0x07: { // Fx07: Set Vx = delay timer value.
+                    V[x] = dt;
+                } break;
+
+                case 0x0A: { // Fx0A: Wait for a key press, store the value of the key in Vx.
+                    // TODO:
+                } break;
+
+                case 0x15: { // Fx15: Set delay timer = Vx.
+                    dt = V[x];
+                } break;
+
+                case 0x18: { // Fx18: Set sound timer = Vx.
+                    st = V[x];
+                } break;
+
+                case 0x1E: { // Fx1E: Set I = I + Vx.
+                    I += V[x];
+                } break;
+
+                case 0x29: { // Fx29: Set I = location of sprite for digit Vx.
+                    // TODO
+                } break;
+
                 case 0x33: { // Fx33: Store BCD representation of Vx in memory locations I, I+1, and I+2.
                              // Takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
-                    u8 value = V[(opcode & 0xF00) >> 8];
-                    *(memory + I) = value / 100;
-                    value = value % 100;
-                    *(memory + I + 1) = value / 10;
-                    value = value % 10;
-                    *(memory + I + 2) = value;
+                    u8 vx = V[x];
+                    *(memory + I) = vx / 100;
+                    vx = vx % 100;
+                    *(memory + I + 1) = vx / 10;
+                    vx = vx % 10;
+                    *(memory + I + 2) = vx;
+                } break;
+
+                case 0x55: { // Fx55: Store registers V0 through Vx in memory starting at location I.
+                    for (int i = 0; i < x; i++) {
+                        *(memory + I + i) = V[i];
+                    }
+                } break;
+
+                case 0x65: { // Fx65: Read registers V0 through Vx from memory starting at location I.
+                    for (int i = 0; i < x; i++) {
+                        V[i] = *(memory + I + i);
+                    }
                 } break;
             }
         } break;

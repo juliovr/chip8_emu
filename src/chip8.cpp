@@ -56,7 +56,6 @@ u8 fonts[FONTS_MEMORY_SIZE] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 };
 
-u16 opcode;
 
 void clear_screen()
 {
@@ -66,7 +65,7 @@ void clear_screen()
 /* Reference: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#3.1 */
 void simulate(u8 *memory)
 {
-    opcode = *(memory + pc) << 8 | *(memory + pc + 1);
+    u16 opcode = *(memory + pc) << 8 | *(memory + pc + 1);
     pc += 2;
 
     printf("Simulating opcode: %04x\n", opcode);
@@ -346,12 +345,11 @@ int main(int argc, char **argv)
 
     // Main loop
     while (!WindowShouldClose()) {
-        float delta_time = GetFrameTime();
+        // float delta_time = GetFrameTime();
 
         simulate(memory);
 
         BeginDrawing();
-            // ClearBackground(BLACK);
 
             // Draw pixels scaled
             for (int i = 0; i < SCREEN_HEIGHT; i++) {
@@ -367,11 +365,6 @@ int main(int argc, char **argv)
                     DrawRectangleRec(pixel, color);
                 }
             }
-
-
-            char text[32];
-            sprintf_s(text, "Simulating %04x", opcode);
-            DrawText(text, 10, 10, 50, WHITE);
         EndDrawing();
     }
 

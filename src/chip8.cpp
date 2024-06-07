@@ -4,13 +4,15 @@
 #include "../include/raylib.h"
 #include "types.h"
 
+#define assert(text)    do { printf(text); *((int *)0) = 0; } while (0);
+
 #define SCREEN_WIDTH    (64)
 #define SCREEN_HEIGHT   (32)
 #define SCREEN_SIZE     (SCREEN_WIDTH*SCREEN_HEIGHT)
 #define SCALE           (40)    /* Pixel scale */
 #define WINDOW_WIDTH    (SCREEN_WIDTH*SCALE)
 #define WINDOW_HEIGHT   (SCREEN_HEIGHT*SCALE)
-#define FPS             (16)
+#define FPS             (60)
 
 
 #define USAGE_ERROR     1
@@ -36,6 +38,7 @@ u8 *memory;
 u8 screen[SCREEN_SIZE];
 
 // Each font is made of 5 8-bit values (1 byte for each row), ranging from 0 to F.
+#define FONT_SIZE_BYTES     5
 #define FONTS_MEMORY_SIZE   (5 * 16)
 u8 fonts[FONTS_MEMORY_SIZE] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -56,6 +59,44 @@ u8 fonts[FONTS_MEMORY_SIZE] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 };
 
+/*
+CHIP-8 keypad:
+╔═══╦═══╦═══╦═══╗
+║ 1 ║ 2 ║ 3 ║ C ║
+╠═══╬═══╬═══╬═══╣
+║ 4 ║ 5 ║ 6 ║ D ║
+╠═══╬═══╬═══╬═══╣
+║ 7 ║ 8 ║ 9 ║ E ║
+╠═══╬═══╬═══╬═══╣
+║ A ║ 0 ║ B ║ F ║
+╚═══╩═══╩═══╩═══╝
+*/
+#define KEY_NUMBER 16
+u8 chip8_keys[KEY_NUMBER] = {
+    0x1, 0x2, 0x3, 0xC,
+    0x4, 0x5, 0x6, 0xD,
+    0x7, 0x8, 0x9, 0xE,
+    0xA, 0x0, 0xB, 0xF,
+};
+
+int input_keys[KEY_NUMBER] = {
+    KEY_ONE,    KEY_TWO,    KEY_THREE,  KEY_FOUR,
+    KEY_Q,      KEY_W,      KEY_E,      KEY_R,
+    KEY_A,      KEY_S,      KEY_D,      KEY_F,
+    KEY_Z,      KEY_X,      KEY_C,      KEY_V,
+};
+
+int get_key_pressed(int key)
+{
+    printf("get_key_pressed = %d\n", key);
+    for (int i = 0; i < KEY_NUMBER; i++) {
+        if (input_keys[i] == key) {
+            return chip8_keys[i];
+        }
+    }
+
+    return -1;
+}
 
 void clear_screen()
 {
@@ -68,7 +109,7 @@ void simulate(u8 *memory)
     u16 opcode = *(memory + pc) << 8 | *(memory + pc + 1);
     pc += 2;
 
-    printf("Simulating opcode: %04x\n", opcode);
+    // printf("Simulating opcode: %04x\n", opcode);
 
     
     switch (opcode & 0xF000) {
@@ -120,7 +161,7 @@ void simulate(u8 *memory)
             u8 x = (opcode & 0xF00) >> 8;
             u8 y = (opcode & 0xF0) >> 4;
 
-            switch (opcode & 1) {
+            switch (opcode & 0xF) {
                 case 0x0: { // 8xy0: Set Vx = Vy.
                     V[x] = V[y];
                 } break;
@@ -204,14 +245,14 @@ void simulate(u8 *memory)
                 u8 sprite_row = *(memory + I + row); // Each bit is 1 pixel
 
                 for (int col = 0; col < sprite_width; col++) {
-                    int index = ((y + row) * SCREEN_WIDTH) + (x + col);
+                    int screen_index = ((y + row) * SCREEN_WIDTH) + (x + col);
                     u8 bit_value = (sprite_row >> (7 - col)) & 1; // Set the corresponding bit to the screen byte
 
-                    if (screen[index] != bit_value) {
+                    if (screen[screen_index] != bit_value) {
                         collision = 1;
                     }
 
-                    screen[index] ^= bit_value;
+                    screen[screen_index] ^= bit_value;
                 }
             }
 
@@ -219,19 +260,20 @@ void simulate(u8 *memory)
         } break;
         
         case 0xE000: {
-            // u8 key_pressed = ; // TODO:
-            // u8 vx = V[(opcode & 0xF00) >> 8];
+            int key_pressed = get_key_pressed(GetKeyPressed());
+            int vx = V[(opcode & 0xF00) >> 8];
+
             switch (opcode & 0xFF) {
                 case 0x9E: { // Ex9E: Skip next instruction if key with the value of Vx is pressed.
-                    // if (key_pressed == vx) {
-                    //     pc += 2;
-                    // }
+                    if (key_pressed == vx) {
+                        pc += 2;
+                    }
                 } break;
 
                 case 0xA1: { // ExA1: Skip next instruction if key with the value of Vx is not pressed.
-                    // if (key_pressed != vx) {
-                    //     pc += 2;
-                    // }
+                    if (key_pressed != vx) {
+                        pc += 2;
+                    }
                 } break;
             }
         } break;
@@ -244,7 +286,11 @@ void simulate(u8 *memory)
                 } break;
 
                 case 0x0A: { // Fx0A: Wait for a key press, store the value of the key in Vx.
-                    // TODO:
+                    int key_pressed;
+                    while ((key_pressed = GetKeyPressed()) == 0)
+                        ;
+
+                    printf("key_pressed = %d\n", key_pressed);
                 } break;
 
                 case 0x15: { // Fx15: Set delay timer = Vx.
@@ -259,8 +305,9 @@ void simulate(u8 *memory)
                     I += V[x];
                 } break;
 
-                case 0x29: { // Fx29: Set I = location of sprite for digit Vx.
-                    // TODO
+                case 0x29: { // Fx29: Set I to the memory address of the sprite data corresponding to the hexadecimal digit stored in register VX.
+                    u8 vx = V[(opcode & 0xF00) >> 8];
+                    I = (vx * FONT_SIZE_BYTES);
                 } break;
 
                 case 0x33: { // Fx33: Store BCD representation of Vx in memory locations I, I+1, and I+2.
@@ -346,6 +393,10 @@ int main(int argc, char **argv)
     // Main loop
     while (!WindowShouldClose()) {
         // float delta_time = GetFrameTime();
+
+        if (dt > 0) {
+            dt--;
+        }
 
         simulate(memory);
 

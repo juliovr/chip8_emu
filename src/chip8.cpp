@@ -12,7 +12,7 @@
 #define SCALE           (40)    /* Pixel scale */
 #define WINDOW_WIDTH    (SCREEN_WIDTH*SCALE)
 #define WINDOW_HEIGHT   (SCREEN_HEIGHT*SCALE)
-#define FPS             (60)
+#define FPS             (240)
 
 
 #define USAGE_ERROR     1
@@ -33,6 +33,7 @@ u16 pc; // Program counter.
 u8 dt; // Delay timer.
 u8 st; // Sound timer.
 
+// TODO: replace with u8 memory[MAX_MEMORY_SIZE];
 u8 *memory;
 
 u8 screen[SCREEN_SIZE];
@@ -86,11 +87,10 @@ int input_keys[KEY_NUMBER] = {
     KEY_Z,      KEY_X,      KEY_C,      KEY_V,
 };
 
-int get_key_pressed(int key)
+int get_key_pressed()
 {
-    printf("get_key_pressed = %d\n", key);
     for (int i = 0; i < KEY_NUMBER; i++) {
-        if (input_keys[i] == key) {
+        if (IsKeyDown(input_keys[i])) {
             return chip8_keys[i];
         }
     }
@@ -148,9 +148,7 @@ void simulate(u8 *memory)
         } break;
 
         case 0x6000: { // 6xkk: Set Vx = kk.
-            u8 register_index = (opcode >> 8) & 0xF;
-            u8 value = opcode & 0xFF;
-            V[register_index] = value;
+            V[(opcode & 0xF00) >> 8] = (opcode & 0xFF);
         } break;
 
         case 0x7000: { // 7xkk: Set Vx = Vx + kk.
@@ -181,7 +179,6 @@ void simulate(u8 *memory)
                 case 0x4: { // 8xy4: Set Vx = Vx + Vy, set VF = carry.
                     V[x] = V[x] + V[y];
 
-                    // TODO: check carry. I think this is correct
                     VF = (V[x] < V[y]); // Carry
                 } break;
 
@@ -194,7 +191,7 @@ void simulate(u8 *memory)
                 case 0x6: { // 8xy6: Set Vx = Vx SHR 1.
                     VF = (V[x] & 1); // If least-significant bit is 1
                     
-                    V[x] >>= 1;
+                    V[x] = V[x] >> 1;
                 } break;
 
                 case 0x7: { // 8xy7: Set Vx = Vy - Vx, set VF = NOT borrow.
@@ -206,7 +203,7 @@ void simulate(u8 *memory)
                 case 0xE: { // 8xyE: Set Vx = Vx SHL 1.
                     VF = (V[x] & 0x80); // If most-significant bit is 1
 
-                    V[x] <<= 1;
+                    V[x] = V[x] << 1;
                 } break;
 
             }
@@ -247,12 +244,17 @@ void simulate(u8 *memory)
                 for (int col = 0; col < sprite_width; col++) {
                     int screen_index = ((y + row) * SCREEN_WIDTH) + (x + col);
                     u8 bit_value = (sprite_row >> (7 - col)) & 1; // Set the corresponding bit to the screen byte
-
-                    if (screen[screen_index] != bit_value) {
-                        collision = 1;
-                    }
+                    u8 old_value = screen[screen_index];
+                    // if (screen[screen_index] != bit_value) {
+                    //     collision = 1;
+                    // }
+                    collision = screen[screen_index] & bit_value;
 
                     screen[screen_index] ^= bit_value;
+
+                    // if (old_value == 1 && screen[screen_index] == 0) {
+                    //     collision = 1;
+                    // }
                 }
             }
 
@@ -260,7 +262,7 @@ void simulate(u8 *memory)
         } break;
         
         case 0xE000: {
-            int key_pressed = get_key_pressed(GetKeyPressed());
+            int key_pressed = get_key_pressed();
             int vx = V[(opcode & 0xF00) >> 8];
 
             switch (opcode & 0xFF) {
@@ -287,10 +289,10 @@ void simulate(u8 *memory)
 
                 case 0x0A: { // Fx0A: Wait for a key press, store the value of the key in Vx.
                     int key_pressed;
-                    while ((key_pressed = GetKeyPressed()) == 0)
+                    while ((key_pressed = get_key_pressed()) == -1)
                         ;
 
-                    printf("key_pressed = %d\n", key_pressed);
+                    V[x] = (u8)key_pressed;
                 } break;
 
                 case 0x15: { // Fx15: Set delay timer = Vx.
@@ -320,16 +322,20 @@ void simulate(u8 *memory)
                     *(memory + I + 2) = vx;
                 } break;
 
-                case 0x55: { // Fx55: Store registers V0 through Vx in memory starting at location I.
-                    for (int i = 0; i < x; i++) {
+                case 0x55: { // Fx55: Store the values of registers V0 to VX inclusive in memory starting at address I. I is set to I + X + 1 after operation
+                    for (int i = 0; i <= x; i++) {
                         *(memory + I + i) = V[i];
                     }
+
+                    // I = I + x + 1;
                 } break;
 
-                case 0x65: { // Fx65: Read registers V0 through Vx from memory starting at location I.
-                    for (int i = 0; i < x; i++) {
+                case 0x65: { // Fx65: Fill registers V0 to VX inclusive with the values stored in memory starting at address I. I is set to I + X + 1 after operation
+                    for (int i = 0; i <= x; i++) {
                         V[i] = *(memory + I + i);
                     }
+
+                    // I = I + x + 1;
                 } break;
             }
         } break;
@@ -396,6 +402,11 @@ int main(int argc, char **argv)
 
         if (dt > 0) {
             dt--;
+        }
+
+        if (st > 0) {
+            // TODO: play sound
+            st--;
         }
 
         simulate(memory);

@@ -33,8 +33,7 @@ u16 pc; // Program counter.
 u8 dt; // Delay timer.
 u8 st; // Sound timer.
 
-// TODO: replace with u8 memory[MAX_MEMORY_SIZE];
-u8 *memory;
+u8 memory[MAX_MEMORY_SIZE];
 
 u8 screen[SCREEN_SIZE];
 
@@ -104,9 +103,9 @@ void clear_screen()
 }
 
 /* Reference: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#3.1 */
-void simulate(u8 *memory)
+void simulate()
 {
-    u16 opcode = *(memory + pc) << 8 | *(memory + pc + 1);
+    u16 opcode = memory[pc] << 8 | memory[pc + 1];
     pc += 2;
 
     // printf("Simulating opcode: %04x\n", opcode);
@@ -239,7 +238,7 @@ void simulate(u8 *memory)
             u8 collision = 0;
 
             for (int row = 0; row < n; row++) {
-                u8 sprite_row = *(memory + I + row); // Each bit is 1 pixel
+                u8 sprite_row = memory[I + row];; // Each bit is 1 pixel
 
                 for (int col = 0; col < sprite_width; col++) {
                     int screen_index = ((y + row) * SCREEN_WIDTH) + (x + col);
@@ -315,16 +314,16 @@ void simulate(u8 *memory)
                 case 0x33: { // Fx33: Store BCD representation of Vx in memory locations I, I+1, and I+2.
                              // Takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
                     u8 vx = V[x];
-                    *(memory + I) = vx / 100;
+                    memory[I] = vx / 100;
                     vx = vx % 100;
-                    *(memory + I + 1) = vx / 10;
+                    memory[I + 1] = vx / 10;
                     vx = vx % 10;
-                    *(memory + I + 2) = vx;
+                    memory[I + 2] = vx;
                 } break;
 
                 case 0x55: { // Fx55: Store the values of registers V0 to VX inclusive in memory starting at address I. I is set to I + X + 1 after operation
                     for (int i = 0; i <= x; i++) {
-                        *(memory + I + i) = V[i];
+                        memory[I + i] = V[i];
                     }
 
                     // I = I + x + 1;
@@ -332,7 +331,7 @@ void simulate(u8 *memory)
 
                 case 0x65: { // Fx65: Fill registers V0 to VX inclusive with the values stored in memory starting at address I. I is set to I + X + 1 after operation
                     for (int i = 0; i <= x; i++) {
-                        V[i] = *(memory + I + i);
+                        V[i] = memory[I + i];
                     }
 
                     // I = I + x + 1;
@@ -372,7 +371,6 @@ int main(int argc, char **argv)
 
     clear_screen();
 
-    memory = (u8 *)malloc(MAX_MEMORY_SIZE);
     memset(memory, 0, MAX_MEMORY_SIZE);
 
     // Load font into memory
@@ -409,7 +407,7 @@ int main(int argc, char **argv)
             st--;
         }
 
-        simulate(memory);
+        simulate();
 
         BeginDrawing();
 
@@ -429,8 +427,6 @@ int main(int argc, char **argv)
             }
         EndDrawing();
     }
-
-    free(memory);
 
     CloseWindow();
     

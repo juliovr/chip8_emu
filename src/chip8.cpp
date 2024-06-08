@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "../include/raylib.h"
 #include "types.h"
 
@@ -103,7 +104,7 @@ void clear_screen(Chip8_state *state)
     memset(state->screen, 0, sizeof(state->screen));
 }
 
-/* Reference: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#3.1 */
+
 void emulate(Chip8_state *state)
 {
     u16 opcode = state->memory[state->pc] << 8 | state->memory[state->pc + 1];
@@ -347,6 +348,15 @@ void emulate(Chip8_state *state)
             }
         } break;
     }
+
+
+    if (state->delay_timer > 0) {
+        state->delay_timer--;
+    }
+
+    if (state->sound_timer > 0) {
+        state->sound_timer--;
+    }
 }
 
 void init_chip8(Chip8_state *state, char *filename_rom)
@@ -357,7 +367,7 @@ void init_chip8(Chip8_state *state, char *filename_rom)
 
     memset(state->memory, 0, MAX_MEMORY_SIZE);
 
-    // Load font into memory
+    // Load fonts into memory
     for (int i = 0; i < FONTS_MEMORY_SIZE; i++) {
         state->memory[i] = fonts[i];
     }
@@ -379,6 +389,33 @@ void init_chip8(Chip8_state *state, char *filename_rom)
 
 static Chip8_state chip8_state = {};
 
+#define MAX_SAMPLES             512
+#define MAX_SAMPLES_PER_UPDATE  4096
+#define SAMPLE_RATE             44100
+#define SAMPLE_SIZE             16
+#define NUMBER_OF_CHANNELS      1
+
+float frequency = 440.0f;
+
+// Index for audio rendering
+float sine_idx = 0.0f;
+
+// Audio input processing callback
+void AudioInputCallback(void *buffer, unsigned int frames)
+{
+    float incr = frequency/SAMPLE_RATE;
+    short *d = (short *)buffer;
+
+    for (unsigned int i = 0; i < frames; i++)
+    {
+        d[i] = (short)(32000.0f*sinf(2*PI*sine_idx));
+        sine_idx += incr;
+        if (sine_idx > 1.0f) {
+            sine_idx -= 1.0f;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2) {
@@ -393,21 +430,29 @@ int main(int argc, char **argv)
     
 
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, filename_rom);
+    InitAudioDevice();
 
     SetTargetFPS(FPS);
 
+    SetAudioStreamBufferSizeDefault(MAX_SAMPLES_PER_UPDATE);
+
+    // Init raw audio stream (sample rate: 44100, sample size: 16bit-short, channels: 1-mono)
+    AudioStream stream = LoadAudioStream(SAMPLE_RATE, SAMPLE_SIZE, NUMBER_OF_CHANNELS);
+
+    SetAudioStreamCallback(stream, AudioInputCallback);
+
+    PlayAudioStream(stream);    // Start processing stream buffer (initialization of audio)
+    PauseAudioStream(stream);   //      but stop it immediately
+
     // Main loop
     while (!WindowShouldClose()) {
-        if (state->delay_timer > 0) {
-            state->delay_timer--;
-        }
+        emulate(state);
 
         if (state->sound_timer > 0) {
-            // TODO: play sound
-            state->sound_timer--;
+            ResumeAudioStream(stream);
+        } else {
+            PauseAudioStream(stream);
         }
-
-        emulate(state);
 
         BeginDrawing();
             for (int i = 0; i < SCREEN_HEIGHT; i++) {
@@ -426,6 +471,8 @@ int main(int argc, char **argv)
         EndDrawing();
     }
 
+    UnloadAudioStream(stream);   // Close raw audio stream and delete buffers from RAM
+    CloseAudioDevice();
     CloseWindow();
     
     return 0;

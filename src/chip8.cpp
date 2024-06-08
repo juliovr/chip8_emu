@@ -22,7 +22,6 @@
 #define START_MEMORY    (0x200) /* First 512 are reserved */
 
 u8 V[16]; // 16 8-bit registers, from V0 to VF.
-u8 VF = V[0xF]; // Special register used as a flag. It is not used by the programs.
 
 u16 I; // Address register.
 u16 stack[16];
@@ -178,29 +177,29 @@ void simulate()
                 case 0x4: { // 8xy4: Set Vx = Vx + Vy, set VF = carry.
                     V[x] = V[x] + V[y];
 
-                    VF = (V[x] < V[y]); // Carry
+                    V[0xF] = (V[x] < V[y]); // Carry
                 } break;
 
                 case 0x5: { // 8xy5: Set Vx = Vx - Vy, set VF = NOT borrow.
-                    VF = (V[x] > V[y]);
+                    V[0xF] = (V[x] >= V[y]);
 
                     V[x] = V[x] - V[y];
                 } break;
 
                 case 0x6: { // 8xy6: Set Vx = Vx SHR 1.
-                    VF = (V[x] & 1); // If least-significant bit is 1
+                    V[0xF] = (V[x] & 1); // If least-significant bit is 1
                     
                     V[x] = V[x] >> 1;
                 } break;
 
                 case 0x7: { // 8xy7: Set Vx = Vy - Vx, set VF = NOT borrow.
-                    VF = (V[y] > V[x]);
+                    V[0xF] = (V[y] >= V[x]);
 
                     V[x] = V[y] - V[x];
                 } break;
 
                 case 0xE: { // 8xyE: Set Vx = Vx SHL 1.
-                    VF = (V[x] & 0x80); // If most-significant bit is 1
+                    V[0xF] = (V[x] >> 7); // If most-significant bit is 1
 
                     V[x] = V[x] << 1;
                 } break;
@@ -225,15 +224,15 @@ void simulate()
         } break;
 
         case 0xC000: { // Cxkk: Set Vx = random byte AND kk.
-            u8 random = 0; // TODO: compute random number
+            u8 random = rand() % 0xFF;
             V[(opcode & 0xF00) >> 8] = random & (opcode & 0xFF);
         } break;
 
         case 0xD000: { // Dxyn: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             u8 sprite_width = 8;
             u8 n = opcode & 0xF;
-            u8 x = V[(opcode >> 8) & 0xF];
-            u8 y = V[(opcode >> 4) & 0xF];
+            u8 vx = V[(opcode >> 8) & 0xF];
+            u8 vy = V[(opcode >> 4) & 0xF];
 
             u8 collision = 0;
 
@@ -241,23 +240,18 @@ void simulate()
                 u8 sprite_row = memory[I + row];; // Each bit is 1 pixel
 
                 for (int col = 0; col < sprite_width; col++) {
-                    int screen_index = ((y + row) * SCREEN_WIDTH) + (x + col);
+                    int screen_index = ((vy + row) * SCREEN_WIDTH) + (vx + col);
                     u8 bit_value = (sprite_row >> (7 - col)) & 1; // Set the corresponding bit to the screen byte
-                    u8 old_value = screen[screen_index];
-                    // if (screen[screen_index] != bit_value) {
-                    //     collision = 1;
-                    // }
-                    collision = screen[screen_index] & bit_value;
+                    
+                    if (screen[screen_index] == 1 && screen[screen_index] & bit_value) {
+                        collision = 1;
+                    }
 
                     screen[screen_index] ^= bit_value;
-
-                    // if (old_value == 1 && screen[screen_index] == 0) {
-                    //     collision = 1;
-                    // }
                 }
             }
 
-            VF = collision;
+            V[0xF] = collision;
         } break;
         
         case 0xE000: {
@@ -307,8 +301,7 @@ void simulate()
                 } break;
 
                 case 0x29: { // Fx29: Set I to the memory address of the sprite data corresponding to the hexadecimal digit stored in register VX.
-                    u8 vx = V[(opcode & 0xF00) >> 8];
-                    I = (vx * FONT_SIZE_BYTES);
+                    I = (V[x] * FONT_SIZE_BYTES);
                 } break;
 
                 case 0x33: { // Fx33: Store BCD representation of Vx in memory locations I, I+1, and I+2.
@@ -321,20 +314,16 @@ void simulate()
                     memory[I + 2] = vx;
                 } break;
 
-                case 0x55: { // Fx55: Store the values of registers V0 to VX inclusive in memory starting at address I. I is set to I + X + 1 after operation
+                case 0x55: { // Fx55: Store the values of registers V0 to VX inclusive in memory starting at address I.
                     for (int i = 0; i <= x; i++) {
                         memory[I + i] = V[i];
                     }
-
-                    // I = I + x + 1;
                 } break;
 
-                case 0x65: { // Fx65: Fill registers V0 to VX inclusive with the values stored in memory starting at address I. I is set to I + X + 1 after operation
+                case 0x65: { // Fx65: Fill registers V0 to VX inclusive with the values stored in memory starting at address I.
                     for (int i = 0; i <= x; i++) {
                         V[i] = memory[I + i];
                     }
-
-                    // I = I + x + 1;
                 } break;
             }
         } break;
@@ -396,8 +385,6 @@ int main(int argc, char **argv)
 
     // Main loop
     while (!WindowShouldClose()) {
-        // float delta_time = GetFrameTime();
-
         if (dt > 0) {
             dt--;
         }
@@ -410,8 +397,6 @@ int main(int argc, char **argv)
         simulate();
 
         BeginDrawing();
-
-            // Draw pixels scaled
             for (int i = 0; i < SCREEN_HEIGHT; i++) {
                 for (int j = 0; j < SCREEN_WIDTH; j++) {
                     int index = (i * SCREEN_WIDTH) + j;

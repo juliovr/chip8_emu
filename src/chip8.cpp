@@ -11,7 +11,7 @@
 #define SCALE                   (40)    /* Pixel scale */
 #define WINDOW_WIDTH            (SCREEN_WIDTH*SCALE)
 #define WINDOW_HEIGHT           (SCREEN_HEIGHT*SCALE)
-#define FPS                     (240)
+#define FPS                     (120)
 
 #define USAGE_ERROR             1
 #define UNKNOWN_OPCODE          2
@@ -19,6 +19,12 @@
 
 #define MAX_MEMORY_SIZE         (4096)  /* 4 KB */
 #define START_MEMORY            (0x200) /* First 512 are reserved */
+
+#define MAX_SAMPLES             512
+#define MAX_SAMPLES_PER_UPDATE  4096
+#define SAMPLE_RATE             44100
+#define SAMPLE_SIZE             16
+#define NUMBER_OF_CHANNELS      1
 
 
 // Each font is made of 5 8-bit values (1 byte for each row), ranging from 0 to F.
@@ -88,7 +94,7 @@ struct Chip8_state {
     u8 screen[SCREEN_SIZE];
 };
 
-int get_key_pressed()
+static int get_key_pressed()
 {
     for (int i = 0; i < KEY_NUMBER; i++) {
         if (IsKeyDown(input_keys[i])) {
@@ -99,13 +105,13 @@ int get_key_pressed()
     return -1;
 }
 
-void clear_screen(Chip8_state *state)
+static void clear_screen(Chip8_state *state)
 {
     memset(state->screen, 0, sizeof(state->screen));
 }
 
 
-void emulate(Chip8_state *state)
+static void emulate(Chip8_state *state)
 {
     u16 opcode = state->memory[state->pc] << 8 | state->memory[state->pc + 1];
     state->pc += 2;
@@ -359,7 +365,7 @@ void emulate(Chip8_state *state)
     }
 }
 
-void init_chip8(Chip8_state *state, char *filename_rom)
+static void init_chip8(Chip8_state *state, char *filename_rom)
 {
     printf("Loading %s...\n", filename_rom);
 
@@ -387,21 +393,12 @@ void init_chip8(Chip8_state *state, char *filename_rom)
 }
 
 
-static Chip8_state chip8_state = {};
-
-#define MAX_SAMPLES             512
-#define MAX_SAMPLES_PER_UPDATE  4096
-#define SAMPLE_RATE             44100
-#define SAMPLE_SIZE             16
-#define NUMBER_OF_CHANNELS      1
-
-float frequency = 440.0f;
-
+static float frequency = 440.0f;
 // Index for audio rendering
-float sine_idx = 0.0f;
+static float sine_idx = 0.0f;
 
 // Audio input processing callback
-void AudioInputCallback(void *buffer, unsigned int frames)
+static void AudioInputCallback(void *buffer, unsigned int frames)
 {
     float incr = frequency/SAMPLE_RATE;
     short *d = (short *)buffer;
@@ -415,6 +412,8 @@ void AudioInputCallback(void *buffer, unsigned int frames)
         }
     }
 }
+
+static Chip8_state chip8_state = {};
 
 int main(int argc, char **argv)
 {
